@@ -31,20 +31,20 @@ for video_file in "$videos_folder"/*; do
             # Obtenir la durée totale de la vidéo
             duration=$(ffprobe -i "$video_file" -show_entries format=duration -v quiet -of csv="p=0")
 
-            # Définir les pourcentages pour les segments (10%, 50%, 90%)
-            segment1_start=$(bc -l <<< "$duration * 0.1")
-            segment1_end=$(bc -l <<< "$duration * 0.2")
-            segment2_start=$(bc -l <<< "$duration * 0.5")
-            segment2_end=$(bc -l <<< "$duration * 0.6")
-            segment3_start=$(bc -l <<< "$duration * 0.9")
-            segment3_end=$(bc -l <<< "$duration * 0.95")
+            # Diviser la vidéo en 16 segments égaux et générer des miniatures
+            for ((i = 0; i < 16; i++)); do
+                segment_start=$(bc -l <<< "$duration * $i / 16")
+                segment_end=$(bc -l <<< "$duration * ($i + 1) / 16")
 
-            # Générer une vidéo à partir des segments spécifiés
-            ffmpeg -i "$video_file" -vf "select='between(t,$segment1_start,$segment1_end)+between(t,$segment2_start,$segment2_end)+between(t,$segment3_start,$segment3_end)',setpts=N/FRAME_RATE/TB" -af "aselect='between(t,$segment1_start,$segment1_end)+between(t,$segment2_start,$segment2_end)+between(t,$segment3_start,$segment3_end)',asetpts=N/SR/TB" -an "$output_folder/${video_name}_output.mp4"
+                # Générer des miniatures pour chaque segment
+                ffmpeg -ss "$segment_start" -i "$video_file" -vframes 1 -vf "scale=1920:1080" "$output_folder/${video_name}_thumbnail_$i.jpg"
+            done
 
-            # Créer des miniatures à partir de la vidéo
-            ffmpeg -i "$video_file" -vf "select='isnan(prev_selected_t)+gte(t-prev_selected_t,2)',scale=160:90,tile=7x7" "$output_folder/${video_name}_thumbnails_$(uuidgen).jpg"
-
+            # Créer une mosaïque à partir des miniatures
+            montage -tile 4x4 -geometry 1920x1080+0+0 "$output_folder/${video_name}_thumbnail_"*.jpg "$output_folder/${video_name}_mosaic.jpg"
+        
+            # Supprimer les miniatures individuelles après la création de la mosaïque
+            rm "$output_folder/${video_name}_thumbnail_"*.jpg
         else
             echo "Le fichier '$video_file' n'est pas une vidéo et sera ignoré."
         fi
