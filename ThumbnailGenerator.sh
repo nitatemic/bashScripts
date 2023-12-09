@@ -8,6 +8,16 @@ fi
 
 videos_folder="$1"
 
+timecode_to_seconds() {
+    local timecode=$1
+    local hours=$(echo "$timecode" | cut -d: -f1)
+    local minutes=$(echo "$timecode" | cut -d: -f2)
+    local seconds=$(echo "$timecode" | cut -d: -f3 | cut -d. -f1)
+
+    local total_seconds=$((hours * 3600 + minutes * 60 + seconds))
+    echo "$total_seconds"
+}
+
 # Check if the folder exists
 if [ ! -d "$videos_folder" ]; then
     echo "The specified folder does not exist."
@@ -29,22 +39,41 @@ for video_file in "$videos_folder"/*; do
             output_folder="$videos_folder/${video_name}"
             mkdir -p "$output_folder"
 
-            # Get the total duration of the video (if not retrieved previously)
-            duration=$(ffprobe -i "$video_file" -show_entries format=duration -v quiet -of csv="p=0")
+            duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d , | awk -F ':' '{printf "%02d:%02d:%02d", $1, $2, $3}')
+            duration_seconds=$(timecode_to_seconds "$duration_timecode")
+            echo "$duration_seconds"
+            #Si Duration est inferieur à 60 seconds
+            if [ "$duration_seconds" -lt 60 ]; then
+                for ((i = 0; i < 4; i++)); do
+                    segment_start=$(bc -l <<< "$duration_seconds * $i / 4")
+                    segment_end=$(bc -l <<< "$duration_seconds * ($i + 1) / 4")
+
+                    # Generate thumbnails for each segment in the background
+                    ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/${video_name}_thumbnail_$i.jpg" &
+                done
+            else
+                for ((i = 0; i < 16; i++)); do
+                    segment_start=$(bc -l <<< "$duration_seconds * $i / 16")
+                    segment_end=$(bc -l <<< "$duration_seconds * ($i + 1) / 16")
+
+                    # Generate thumbnails for each segment in the background
+                    ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/${video_name}_thumbnail_$i.jpg" &
+                done
+            fi
+
 
             # Generate thumbnails for 16 segments in parallel
-            for ((i = 0; i < 16; i++)); do
-                segment_start=$(bc -l <<< "$duration * $i / 16")
-                segment_end=$(bc -l <<< "$duration * ($i + 1) / 16")
 
-                # Generate thumbnails for each segment in the background
-                ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/${video_name}_thumbnail_$i.jpg" &
-            done
             wait # Wait for all background processes to finish
             resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video_file")
 
-            # Create a mosaic from the thumbnails
-            montage -tile 4x4 -geometry "${resolution}+0+0" "$output_folder/${video_name}_thumbnail_"*.jpg "$output_folder/${video_name}_mosaic.jpg"
+            if [ "$duration_seconds" -lt 60 ]; then
+              # Create a mosaic from the thumbnails
+              montage -tile 2x2 -geometry "${resolution}+0+0" "$output_folder/${video_name}_thumbnail_"*.jpg "$output_folder/${video_name}_mosaic.jpg"
+            else
+             # Create a mosaic from the thumbnails
+             montage -tile 4x4 -geometry "${resolution}+0+0" "$output_folder/${video_name}_thumbnail_"*.jpg "$output_folder/${video_name}_mosaic.jpg"
+            fi
 
             # Retrieve video information (if not retrieved previously)
             if [ ! -f "$output_folder/image_noire.jpg" ]; then
