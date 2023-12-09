@@ -49,7 +49,7 @@ for video_file in "$videos_folder"/*; do
             # Retrieve video information
             video_title=$(basename "$video_file")
             video_info=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height,duration -of default=noprint_wrappers=1:nokey=1 "$video_file")
-            resolution=$(echo "$video_info" | awk -F 'x' '{printf "%dx%d", $1, $2}')
+            resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video_file")
             duration=$(ffprobe -i "$video_file" -show_entries format=duration -v quiet -of csv="p=0")
             duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d ,)
             duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d , | awk -F ':' '{printf "%02d:%02d:%02d", $1, $2, $3}')
