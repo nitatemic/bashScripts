@@ -24,9 +24,7 @@ for video_file in "$videos_folder"/*; do
             video_name=$(basename "$video_file")
             video_name="${video_name%.*}"  # Remove extension
 
-            # Measure the time for each video processing
             echo "Processing video: $video_name"
-            time (
                 # Create a folder for each video if it doesn't exist already
                 output_folder="$videos_folder/${video_name}"
                 mkdir -p "$output_folder"
@@ -40,24 +38,23 @@ for video_file in "$videos_folder"/*; do
                     segment_end=$(bc -l <<< "$duration * ($i + 1) / 16")
 
                     # Generate thumbnails for each segment in the background
-                    ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 -vf "scale=1920:-1" "$output_folder/${video_name}_thumbnail_$i.jpg" &
+                    ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/${video_name}_thumbnail_$i.jpg" &
                 done
                 wait # Wait for all background processes to finish
-
+                resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video_file")
                 # Create a mosaic from the thumbnails
-                montage -tile 4x4 -geometry 1920x1080+0+0 "$output_folder/${video_name}_thumbnail_"*.jpg "$output_folder/${video_name}_mosaic.jpg"
+                montage -tile 4x4 -geometry "${resolution}+0+0" "$output_folder/${video_name}_thumbnail_"*.jpg "$output_folder/${video_name}_mosaic.jpg"
 
                 # Retrieve video information (if not retrieved previously)
                 if [ ! -f "$output_folder/image_noire.jpg" ]; then
                     video_title=$(basename "$video_file")
-                    resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video_file")
                     duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d , | awk -F ':' '{printf "%02d:%02d:%02d", $1, $2, $3}')
                     file_size=$(du -h "$video_file" | cut -f1)
-
+                    width=$(echo "$resolution" | cut -d 'x' -f 1)
                     # Concatenate information into the text variable
                     text="Filename: $video_title\nSize: $file_size\nResolution: $resolution\nLength: $duration_timecode"
 
-                    convert -size 7680x400 xc:black -fill white -pointsize 80 -gravity West -annotate +50+0 "$text" "$output_folder/image_noire.jpg"
+                    convert -size "${width}x400" xc:black -fill white -pointsize 80 -gravity West -annotate +50+0 "$text" "$output_folder/image_noire.jpg"
                 fi
 
                 # Combine images vertically
@@ -70,7 +67,7 @@ for video_file in "$videos_folder"/*; do
 
                 #Move the video in the folder
                 mv "$video_file" "$output_folder/"
-            )
+
             echo "Completed processing for video: $video_name"
         else
             echo "The file '$video_file' is not a video and will be ignored."
