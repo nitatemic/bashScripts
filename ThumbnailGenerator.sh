@@ -71,7 +71,7 @@ for video_file in "$videos_folder"/*; do
             fi
 
             # Combine images vertically
-            convert "$output_folder/image_noire.jpg" "$output_folder/${video_name}_mosaic.jpg" -background none -append "$output_folder/${video_name}_thumbnails.jpg"
+            convert "$output_folder/image_noire.jpg" "$output_folder/${video_name}_mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
 
             # Remove individual thumbnails after creating the mosaic
             rm "$output_folder/${video_name}_thumbnail_"*.jpg
