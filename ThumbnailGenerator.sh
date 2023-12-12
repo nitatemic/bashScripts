@@ -8,10 +8,13 @@ NC='\033[0m' # No Color
 # Function to convert timecode to seconds
 timecode_to_seconds() {
     local timecode=$1
-    local hours=$(echo "$timecode" | cut -d: -f1)
-    local minutes=$(echo "$timecode" | cut -d: -f2)
-    local seconds=$(echo "$timecode" | cut -d: -f3 | cut -d. -f1)
 
+    # Extraire les composants de la durée
+    local hours=$(echo "$timecode" | awk -F: '{print $1}')
+    local minutes=$(echo "$timecode" | awk -F: '{print $2}')
+    local seconds=$(echo "$timecode" | awk -F: '{print int($3)}')
+
+    # Calculer le total des secondes
     local total_seconds=$((hours * 3600 + minutes * 60 + seconds))
     echo "$total_seconds"
 }
@@ -51,8 +54,8 @@ for video_file in "$videos_folder"/*; do
             # Extract the file name without extension
             video_name=$(basename "$video_file")
             video_name="${video_name%.*}"  # Remove extension
+            test=$(mediainfo --Output="Video;%Duration/String3%" "$video_file" | awk -F ':' '{ print ($1 * 3600) + ($2 * 60) + $3 }')
 
-            echo -e "${YELLOW}Processing video: $video_name${NC}"
             # Create a folder for each video if it doesn't exist already
             output_folder="$videos_folder/${video_name}"
             if ! mkdir -p "$output_folder"; then
@@ -62,9 +65,10 @@ for video_file in "$videos_folder"/*; do
             fi
 
             # Extract duration information of the video
-            duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d , | awk -F ':' '{printf "%02d:%02d:%02d", $1, $2, $3}')
-            duration_seconds=$(timecode_to_seconds "$duration_timecode")
-            if [ -z "$duration_seconds" ]; then
+            duration_ms=$(mediainfo --Output="Video;%Duration%" "$video_file")
+            duration_in_seconds=$(( duration_ms / 1000 ))  # Conversion de millisecondes en secondes
+            duration_timecode=$(printf "%02d:%02d:%02d" $((duration_in_seconds / 3600)) $(( (duration_in_seconds % 3600) / 60 )) $((duration_in_seconds % 60)))
+            if [ -z "$duration_ms" ]; then
                 error_messages+=("Failed to extract duration for $video_name.")
                 has_errors=true
                 rm -r "$output_folder"
@@ -74,10 +78,10 @@ for video_file in "$videos_folder"/*; do
             #echo -e "${YELLOW}Duration for $video_name: $duration_seconds seconds${NC}"
 
             # Generate thumbnails based on video duration
-            if [ "$duration_seconds" -lt 60 ]; then
+            if [ "$duration_ms" -lt 60000 ]; then
               # Generate 4 thumbnails with timecode in the filename
               for ((i = 0; i < 4; i++)); do
-                  segment_start=$((duration_seconds * i / 4))
+                  segment_start=$((duration_in_seconds * i / 4))
                   timecode=$(printf "%04d" $((segment_start)))
                   if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/$timecode.jpg" &>/dev/null; then
                       error_messages+=("Failed to generate thumbnail $i/4 for $video_name.")
@@ -87,7 +91,7 @@ for video_file in "$videos_folder"/*; do
             else
               # Generate 16 thumbnails with timecode in the filename
               for ((i = 0; i < 16; i++)); do
-                  segment_start=$((duration_seconds * i / 16))
+                  segment_start=$((duration_in_seconds * i / 16))
                   timecode=$(printf "%04d" $((segment_start)))
                   if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/$timecode.jpg" &>/dev/null; then
                       error_messages+=("Failed to generate thumbnail $i/16 for $video_name.")
@@ -119,7 +123,7 @@ for video_file in "$videos_folder"/*; do
               resolution=("${resolution##*x}")x"${resolution%%x*}"
           fi
           # Create mosaic based on video duration
-          if [ "$duration_seconds" -lt 60 ]; then
+          if [ "$duration_ms" -lt 60000 ]; then
             mapfile -d '' files_array < <(find "$output_folder" -type f -name '*.jpg' -print0 | sort -z)
             # For short videos, create a 2x2 mosaic
             montage -tile 2x2 -geometry "${resolution}+0+0" "${files_array[@]}" "$output_folder/mosaic.jpg"
@@ -132,7 +136,6 @@ for video_file in "$videos_folder"/*; do
           # Retrieve video information if not retrieved previously
           if [ ! -f "$output_folder/image_noire.jpg" ]; then
               video_title=$(basename "$video_file")
-              duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d , | awk -F ':' '{printf "%02d:%02d:%02d", $1, $2, $3}')
               file_size=$(du -h "$video_file" | cut -f1)
               width=$(identify -format "%w" "$output_folder/mosaic.jpg")
               height=$(identify -format "%h" "$output_folder/mosaic.jpg")
@@ -150,11 +153,10 @@ for video_file in "$videos_folder"/*; do
           fi
           # Combine images vertically to create the final thumbnail image
           convert "$output_folder/image_noire.jpg" "$output_folder/mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
-          #cp "$output_folder/${video_name}_thumbnails.jpg"  "$thumbnails_folder"
+          cp "$output_folder/${video_name}_thumbnails.jpg"  "$thumbnails_folder"
           find "$output_folder" -maxdepth 1 -type f -name '*.jpg' ! -name "*thumbnails.jpg" -exec rm -v {} + &>/dev/null
           # Move the video file to the processed folder
           mv "$video_file" "$output_folder/"
-          cp "$output_folder/${video_name}_thumbnails.jpg" "$thumbnails_folder"
           echo -e "${YELLOW}Completed processing for video: $video_name${NC}"
 
         else
