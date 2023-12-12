@@ -50,7 +50,6 @@ for video_file in "$videos_folder"/*; do
             else
                 for ((i = 0; i < 16; i++)); do
                     segment_start=$(bc -l <<< "$duration_seconds * $i / 16")
-                    segment_end=$(bc -l <<< "$duration_seconds * ($i + 1) / 16")
 
                     # Generate thumbnails for each segment in the background
                     ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/${video_name}_thumbnail_$i.jpg" &
