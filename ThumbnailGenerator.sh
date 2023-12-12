@@ -71,7 +71,7 @@ for video_file in "$videos_folder"/*; do
                 continue
             fi
 
-            echo -e "${YELLOW}Duration for $video_name: $duration_seconds seconds${NC}"
+            #echo -e "${YELLOW}Duration for $video_name: $duration_seconds seconds${NC}"
 
             # Generate thumbnails based on video duration
             if [ "$duration_seconds" -lt 60 ]; then
@@ -134,13 +134,9 @@ for video_file in "$videos_folder"/*; do
             # Combine images vertically to create the final thumbnail image
             convert "$output_folder/image_noire.jpg" "$output_folder/mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
 
-            cp "$output_folder/${video_name}_mosaic.jpg"  "$thumbnails_folder"
+            cp "$output_folder/${video_name}_thumbnails.jpg"  "$thumbnails_folder"
 
-            # Remove temporary files
-            rm "$output_folder/${video_name}_thumbnail_"*.jpg
-            rm "$output_folder/${video_name}_mosaic.jpg"
-            rm "$output_folder/image_noire.jpg"
-
+            find "$output_folder" -maxdepth 1 -type f -name '*.jpg' ! -name "*thumbnails.jpg" -exec rm -v {} + &>/dev/null
             # Move the video file to the processed folder
             mv "$video_file" "$output_folder/"
 
