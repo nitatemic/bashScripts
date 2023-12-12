@@ -137,12 +137,12 @@ for video_file in "$videos_folder"/*; do
             cp "$output_folder/${video_name}_mosaic.jpg"  "$thumbnails_folder"
 
             # Remove temporary files
-            #rm "$output_folder/${video_name}_thumbnail_"*.jpg
-            #rm "$output_folder/${video_name}_mosaic.jpg"
-            #rm "$output_folder/image_noire.jpg"
+            rm "$output_folder/${video_name}_thumbnail_"*.jpg
+            rm "$output_folder/${video_name}_mosaic.jpg"
+            rm "$output_folder/image_noire.jpg"
 
             # Move the video file to the processed folder
-            #mv "$video_file" "$output_folder/"
+            mv "$video_file" "$output_folder/"
 
             echo -e "${YELLOW}Completed processing for video: $video_name${NC}"
         else
