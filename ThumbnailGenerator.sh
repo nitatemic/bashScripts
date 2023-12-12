@@ -8,21 +8,17 @@ fi
 
 videos_folder="$1"
 
-timecode_to_seconds() {
-    local timecode=$1
-    local hours=$(echo "$timecode" | cut -d: -f1)
-    local minutes=$(echo "$timecode" | cut -d: -f2)
-    local seconds=$(echo "$timecode" | cut -d: -f3 | cut -d. -f1)
-
-    local total_seconds=$((hours * 3600 + minutes * 60 + seconds))
-    echo "$total_seconds"
-}
-
 # Check if the folder exists
 if [ ! -d "$videos_folder" ]; then
     echo "The specified folder does not exist."
     exit 1
 fi
+
+thumbnails_folder="$videos_folder/thumbnails"
+if [ ! -d "$thumbnails_folder" ]; then
+  mkdir "$thumbnails_folder"
+fi
+
 
 # Browse through all the videos in the folder
 for video_file in "$videos_folder"/*; do
@@ -101,7 +97,7 @@ for video_file in "$videos_folder"/*; do
 
             # Combine images vertically
             convert "$output_folder/image_noire.jpg" "$output_folder/${video_name}_mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
-
+            cp "$output_folder/${video_name}_mosaic.jpg"  "$thumbnails_folder"
             # Remove individual thumbnails after creating the mosaic
             rm "$output_folder/${video_name}_thumbnail_"*.jpg
             rm "$output_folder/${video_name}_mosaic"*.jpg
