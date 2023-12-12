@@ -110,8 +110,14 @@ for video_file in "$videos_folder"/*; do
 
           text="Filename: $video_title\nSize: $file_size\nResolution: $resolution\nLength: $duration_timecode"
           # Get video resolution
-          resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video_file")
+          resolution=$(mediainfo --Output="Video;%Width%x%Height%" "$video_file")
+          rotation=$(mediainfo --Output="Video;%Rotation%" "$video_file")
+
           mapfile -d '' files_array < <(find "$output_folder" -type f -name '*.jpg' -print0 | sort -z)
+          #If rotation is 90 or 270, exchange resolution values
+          if [ "$rotation" = "90.000°" ] || [ "$rotation" = "270.000" ]; then
+              resolution=("${resolution##*x}")x"${resolution%%x*}"
+          fi
           # Create mosaic based on video duration
           if [ "$duration_seconds" -lt 60 ]; then
             mapfile -d '' files_array < <(find "$output_folder" -type f -name '*.jpg' -print0 | sort -z)
