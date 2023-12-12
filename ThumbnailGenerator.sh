@@ -8,9 +8,9 @@ NC='\033[0m' # No Color
 # Function to convert timecode to seconds
 timecode_to_seconds() {
     local timecode=$1
-    local hours=$(echo "$timecode" | cut -d: -f1 | sed 's/^0*//')  # Remove leading zeros
-    local minutes=$(echo "$timecode" | cut -d: -f2 | sed 's/^0*//')  # Remove leading zeros
-    local seconds=$(echo "$timecode" | cut -d: -f3 | cut -d. -f1 | sed 's/^0*//')  # Remove leading zeros
+    local hours=$(echo "$timecode" | cut -d: -f1)
+    local minutes=$(echo "$timecode" | cut -d: -f2)
+    local seconds=$(echo "$timecode" | cut -d: -f3 | cut -d. -f1)
 
     local total_seconds=$((hours * 3600 + minutes * 60 + seconds))
     echo "$total_seconds"
@@ -75,48 +75,49 @@ for video_file in "$videos_folder"/*; do
 
             # Generate thumbnails based on video duration
             if [ "$duration_seconds" -lt 60 ]; then
-                # Generate 4 thumbnails for short videos
-                for ((i = 0; i < 4; i++)); do
-                    segment_start=$(bc -l <<< "$duration_seconds * $i / 4")
-                    # Generate thumbnails in the background
-                    if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/${video_name}_thumbnail_$i.jpg" &>/dev/null; then
-                        error_messages+=("Failed to generate thumbnail $i for $video_name.")
-                        has_errors=true
-                    fi
-                done
+              # Generate 4 thumbnails with timecode in the filename
+              for ((i = 0; i < 4; i++)); do
+                  segment_start=$((duration_seconds * i / 4))
+                  timecode=$(printf "%04d" $((segment_start)))
+                  if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/$timecode" &>/dev/null; then
+                      error_messages+=("Failed to generate thumbnail $i/4 for $video_name.")
+                      has_errors=true
+                  fi
+              done
             else
-                # Generate 16 thumbnails for longer videos
-                for ((i = 0; i < 16; i++)); do
-                    segment_start=$(bc -l <<< "$duration_seconds * $i / 16")
-                    # Generate thumbnails in the background
-                    if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/${video_name}_thumbnail_$i.jpg" &>/dev/null; then
-                        error_messages+=("Failed to generate thumbnail $i for $video_name.")
-                        has_errors=true
-                    fi
-                done
-            fi
+              # Generate 16 thumbnails with timecode in the filename
+              for ((i = 0; i < 16; i++)); do
+                  segment_start=$((duration_seconds * i / 16))
+                  timecode=$(printf "%04d" $((segment_start)))
+                  if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/$timecode.jpg" &>/dev/null; then
+                      error_messages+=("Failed to generate thumbnail $i/16 for $video_name.")
+                      has_errors=true
+                  fi
+              done
+          fi
 
-            wait # Wait for all background thumbnail generation processes to finish
+          wait # Wait for all background thumbnail generation processes to finish
 
-            # Get video resolution
-            resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video_file")
+          # Get video resolution
+          resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video_file")
+          files=("$output_folder"/*.jpg)  # Stocke les noms des fichiers dans un tableau
+          # Create mosaic based on video duration
+          if [ "$duration_seconds" -lt 60 ]; then
+            # For short videos, create a 2x2 mosaic
+            montage -tile 2x2 -geometry "${resolution}+0+0" "${files[@]}" "$output_folder/mosaic.jpg"
+          else
+            # For longer videos, create a 4x4 mosaic
+            montage -tile 4x4 -geometry "${resolution}+0+0" "${files[@]}" "$output_folder/mosaic.jpg"
 
-            # Create mosaic based on video duration
-            if [ "$duration_seconds" -lt 60 ]; then
-                # For short videos, create a 2x2 mosaic
-                montage -tile 2x2 -geometry "${resolution}+0+0" "$output_folder/${video_name}_thumbnail_"*.jpg "$output_folder/${video_name}_mosaic.jpg"
-            else
-                # For longer videos, create a 4x4 mosaic
-                montage -tile 4x4 -geometry "${resolution}+0+0" "$output_folder/${video_name}_thumbnail_"*.jpg "$output_folder/${video_name}_mosaic.jpg"
-            fi
+          fi
 
             # Retrieve video information if not retrieved previously
             if [ ! -f "$output_folder/image_noire.jpg" ]; then
                 video_title=$(basename "$video_file")
                 duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d , | awk -F ':' '{printf "%02d:%02d:%02d", $1, $2, $3}')
                 file_size=$(du -h "$video_file" | cut -f1)
-                width=$(identify -format "%w" "$output_folder/${video_name}_mosaic.jpg")
-                height=$(identify -format "%h" "$output_folder/${video_name}_mosaic.jpg")
+                width=$(identify -format "%w" "$output_folder/mosaic.jpg")
+                height=$(identify -format "%h" "$output_folder/mosaic.jpg")
 
                 # Calculate dimensions for text overlay
                 black_image_height=$(awk "BEGIN { printf \"%.0f\n\", $height * 0.1 }")
@@ -131,16 +132,17 @@ for video_file in "$videos_folder"/*; do
             fi
 
             # Combine images vertically to create the final thumbnail image
-            convert "$output_folder/image_noire.jpg" "$output_folder/${video_name}_mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
+            convert "$output_folder/image_noire.jpg" "$output_folder/mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
+
             cp "$output_folder/${video_name}_mosaic.jpg"  "$thumbnails_folder"
 
             # Remove temporary files
-            rm "$output_folder/${video_name}_thumbnail_"*.jpg
-            rm "$output_folder/${video_name}_mosaic.jpg"
-            rm "$output_folder/image_noire.jpg"
+            #rm "$output_folder/${video_name}_thumbnail_"*.jpg
+            #rm "$output_folder/${video_name}_mosaic.jpg"
+            #rm "$output_folder/image_noire.jpg"
 
             # Move the video file to the processed folder
-            mv "$video_file" "$output_folder/"
+            #mv "$video_file" "$output_folder/"
 
             echo -e "${YELLOW}Completed processing for video: $video_name${NC}"
         else
