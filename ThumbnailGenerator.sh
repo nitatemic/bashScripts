@@ -79,7 +79,7 @@ for video_file in "$videos_folder"/*; do
               for ((i = 0; i < 4; i++)); do
                   segment_start=$((duration_seconds * i / 4))
                   timecode=$(printf "%04d" $((segment_start)))
-                  if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/$timecode" &>/dev/null; then
+                  if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/$timecode.jpg" &>/dev/null; then
                       error_messages+=("Failed to generate thumbnail $i/4 for $video_name.")
                       has_errors=true
                   fi
@@ -98,49 +98,59 @@ for video_file in "$videos_folder"/*; do
 
           wait # Wait for all background thumbnail generation processes to finish
 
+          video_title=$(basename "$video_file")
+          duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d , | awk -F ':' '{printf "%02d:%02d:%02d", $1, $2, $3}')
+          file_size=$(du -h "$video_file" | cut -f1)
+          #width=$(identify -format "%w" "$output_folder/mosaic.jpg")
+          #height=$(identify -format "%h" "$output_folder/mosaic.jpg")
+
+          # Calculate dimensions for text overlay
+          #black_image_height=$(awk "BEGIN { printf \"%.0f\n\", $height * 0.1 }")
+          #new_mosaic_height=$((height - black_image_height))
+
+          text="Filename: $video_title\nSize: $file_size\nResolution: $resolution\nLength: $duration_timecode"
           # Get video resolution
           resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$video_file")
-          files=("$output_folder"/*.jpg)  # Stocke les noms des fichiers dans un tableau
+          mapfile -d '' files_array < <(find "$output_folder" -type f -name '*.jpg' -print0 | sort -z)
           # Create mosaic based on video duration
           if [ "$duration_seconds" -lt 60 ]; then
+            mapfile -d '' files_array < <(find "$output_folder" -type f -name '*.jpg' -print0 | sort -z)
             # For short videos, create a 2x2 mosaic
-            montage -tile 2x2 -geometry "${resolution}+0+0" "${files[@]}" "$output_folder/mosaic.jpg"
+            montage -tile 2x2 -geometry "${resolution}+0+0" "${files_array[@]}" "$output_folder/mosaic.jpg"
           else
             # For longer videos, create a 4x4 mosaic
-            montage -tile 4x4 -geometry "${resolution}+0+0" "${files[@]}" "$output_folder/mosaic.jpg"
+            montage -tile 4x4 -geometry "${resolution}+0+0" "${files_array[@]}" "$output_folder/mosaic.jpg"
 
           fi
 
-            # Retrieve video information if not retrieved previously
-            if [ ! -f "$output_folder/image_noire.jpg" ]; then
-                video_title=$(basename "$video_file")
-                duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d , | awk -F ':' '{printf "%02d:%02d:%02d", $1, $2, $3}')
-                file_size=$(du -h "$video_file" | cut -f1)
-                width=$(identify -format "%w" "$output_folder/mosaic.jpg")
-                height=$(identify -format "%h" "$output_folder/mosaic.jpg")
+          # Retrieve video information if not retrieved previously
+          if [ ! -f "$output_folder/image_noire.jpg" ]; then
+              video_title=$(basename "$video_file")
+              duration_timecode=$(ffmpeg -i "$video_file" 2>&1 | awk '/Duration:/ {print $2}' | tr -d , | awk -F ':' '{printf "%02d:%02d:%02d", $1, $2, $3}')
+              file_size=$(du -h "$video_file" | cut -f1)
+              width=$(identify -format "%w" "$output_folder/mosaic.jpg")
+              height=$(identify -format "%h" "$output_folder/mosaic.jpg")
 
-                # Calculate dimensions for text overlay
-                black_image_height=$(awk "BEGIN { printf \"%.0f\n\", $height * 0.1 }")
-                new_mosaic_height=$((height - black_image_height))
+              # Calculate dimensions for text overlay
+              black_image_height=$(awk "BEGIN { printf \"%.0f\n\", $height * 0.1 }")
+              new_mosaic_height=$((height - black_image_height))
 
-                text="Filename: $video_title\nSize: $file_size\nResolution: $resolution\nLength: $duration_timecode"
-                scale_factor=0.02
-                text_size=$(awk "BEGIN { printf \"%.0f\n\", $new_mosaic_height * $scale_factor }")
+              text="Filename: $video_title\nSize: $file_size\nResolution: $resolution\nLength: $duration_timecode"
+              scale_factor=0.02
+              text_size=$(awk "BEGIN { printf \"%.0f\n\", $new_mosaic_height * $scale_factor }")
 
-                # Create a black image with text overlay
-                convert -size "${width}x${black_image_height}" xc:black -fill white -pointsize "$text_size" -gravity West -annotate +50+0 "$text" "$output_folder/image_noire.jpg"
-            fi
+              # Create a black image with text overlay
+              convert -size "${width}x${black_image_height}" xc:black -fill white -pointsize "$text_size" -gravity West -annotate +50+0 "$text" "$output_folder/image_noire.jpg"
+          fi
+          # Combine images vertically to create the final thumbnail image
+          convert "$output_folder/image_noire.jpg" "$output_folder/mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
+          #cp "$output_folder/${video_name}_thumbnails.jpg"  "$thumbnails_folder"
+          find "$output_folder" -maxdepth 1 -type f -name '*.jpg' ! -name "*thumbnails.jpg" -exec rm -v {} + &>/dev/null
+          # Move the video file to the processed folder
+          mv "$video_file" "$output_folder/"
+          cp "$output_folder/${video_name}_thumbnails.jpg" "$thumbnails_folder"
+          echo -e "${YELLOW}Completed processing for video: $video_name${NC}"
 
-            # Combine images vertically to create the final thumbnail image
-            convert "$output_folder/image_noire.jpg" "$output_folder/mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
-
-            cp "$output_folder/${video_name}_thumbnails.jpg"  "$thumbnails_folder"
-
-            find "$output_folder" -maxdepth 1 -type f -name '*.jpg' ! -name "*thumbnails.jpg" -exec rm -v {} + &>/dev/null
-            # Move the video file to the processed folder
-            mv "$video_file" "$output_folder/"
-
-            echo -e "${YELLOW}Completed processing for video: $video_name${NC}"
         else
             error_messages+=("${RED}The file '$video_file' is not a video and will be ignored.${NC}")
             has_errors=true
