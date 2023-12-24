@@ -12,6 +12,7 @@ extractSteamAppID() {
   fi
 }
 
+
 # Fonction pour extraire l'ID à partir d'une requête DuckDuckGo
 DuckyExtractID() {
   local recherche="$1"
@@ -19,16 +20,14 @@ DuckyExtractID() {
 
   # Crée l'URL de recherche DuckDuckGo avec la requête
   local url="https://duckduckgo.com/?q=!ducky+site:steampowered.com+$rechercheEncodee&t=h_&ia=web"
-  echo "URL: $url"
 
   # Effectue la requête HTTP GET avec curl en suivant les redirections (-L)
   local response=$(curl -s -L "$url")
   local finalURL=$(echo "$response" | awk -F 'uddg=' '{print $2}' | awk -F '&' '{print $1}')
   local steam_app_id=$(extractSteamAppID "$finalURL")
   if [ -n "$steam_app_id" ]; then
-    echo "URL finale:$finalURL"
     if [ "$steam_app_id" != "ID non trouvé" ]; then
-      echo "ID d'application Steam: $steam_app_id"
+      echo "$steam_app_id"
     else
       echo "ID Steam non trouvé dans l'URL finale."
     fi
@@ -38,10 +37,25 @@ DuckyExtractID() {
 }
 
 # Vérification du nombre d'arguments
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <Nom du jeu>"
+if [ "$#" -eq 0 ]; then
+    echo "Usage: $0 [-f <Fichier texte contenant la liste des jeux>] <Nom du jeu>"
     exit 1
 fi
 
-# Utilisation de la fonction DuckyExtractID avec l'argument fourni
-DuckyExtractID "$1"
+if [ "$1" == "-f" ]; then
+  # Utilisation de la fonction DuckyExtractID avec le nom du fichier
+  if [ -n "$2" ]; then
+    while read -r jeu; do
+      DuckyExtractID "$jeu"
+      sleep 1
+    done < "$2" > liste_ids.txt
+
+    echo "Liste des IDs d'application Steam a été enregistrée dans le fichier liste_ids.txt"
+  else
+    echo "Usage: $0 -f <Fichier texte contenant la liste des jeux>"
+    exit 1
+  fi
+else
+  # Utilisation de la fonction DuckyExtractID avec l'argument fourni
+  DuckyExtractID "$1"
+fi
