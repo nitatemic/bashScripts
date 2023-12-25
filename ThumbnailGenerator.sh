@@ -53,8 +53,7 @@ for video_file in "$videos_folder"/*; do
         if [[ $file_type == video/* ]]; then
             # Extract the file name without extension
             video_name=$(basename "$video_file")
-            video_name="${video_name%.*}"  # Remove extension
-            test=$(mediainfo --Output="Video;%Duration/String3%" "$video_file" | awk -F ':' '{ print ($1 * 3600) + ($2 * 60) + $3 }')
+            video_name="${video_name%.*}"
 
             # Create a folder for each video if it doesn't exist already
             output_folder="$videos_folder/${video_name}"
@@ -155,8 +154,7 @@ for video_file in "$videos_folder"/*; do
           convert "$output_folder/image_noire.jpg" "$output_folder/mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
           cp "$output_folder/${video_name}_thumbnails.jpg"  "$thumbnails_folder"
           find "$output_folder" -maxdepth 1 -type f -name '*.jpg' ! -name "*thumbnails.jpg" -exec rm -v {} + &>/dev/null
-          # Move the video file to the processed folder
-          mv "$video_file" "$output_folder/"
+          rm -r "$output_folder"
           echo -e "${YELLOW}Completed processing for video: $video_name${NC}"
 
         else
