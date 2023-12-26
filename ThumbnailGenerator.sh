@@ -4,7 +4,7 @@ readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
 error_messages=()
-
+video_count=0
 # Function to convert timecode to seconds
 timecode_to_seconds() {
     local timecode=$1
@@ -44,6 +44,13 @@ if [ ! -d "$thumbnails_folder" ]; then
         exit 1
     fi
 fi
+# Total number of video in the folder
+
+total_video_count=0
+
+for video_file in "$videos_folder"/*; do
+  ((total_video_count++))
+done
 
 # Browse through all the videos in the folder
 for video_file in "$videos_folder"/*; do
@@ -155,7 +162,8 @@ for video_file in "$videos_folder"/*; do
           cp "$output_folder/${video_name}_thumbnails.jpg"  "$thumbnails_folder"
           find "$output_folder" -maxdepth 1 -type f -name '*.jpg' ! -name "*thumbnails.jpg" -exec rm -v {} + &>/dev/null
           rm -r "$output_folder"
-          echo -e "${YELLOW}Completed processing for video: $video_name${NC}"
+          ((video_count++))
+          echo -e "${YELLOW}Completed processing for video $video_count of $total_video_count "
 
         else
             error_messages+=("${RED}The file '$video_file' is not a video and will be ignored.${NC}")
