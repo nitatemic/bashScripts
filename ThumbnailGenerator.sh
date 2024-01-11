@@ -5,14 +5,18 @@ readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
 error_messages=()
 video_count=0
+
 # Function to convert timecode to seconds
 timecode_to_seconds() {
     local timecode=$1
 
     # Extraire les composants de la durée
-    local hours=$(echo "$timecode" | awk -F: '{print $1}')
-    local minutes=$(echo "$timecode" | awk -F: '{print $2}')
-    local seconds=$(echo "$timecode" | awk -F: '{print int($3)}')
+    local hours
+    hours=$(echo "$timecode" | awk -F: '{print $1}')
+    local minutes
+    minutes=$(echo "$timecode" | awk -F: '{print $2}')
+    local seconds
+    seconds=$(echo "$timecode" | awk -F: '{print int($3)}')
 
     # Calculer le total des secondes
     local total_seconds=$((hours * 3600 + minutes * 60 + seconds))
@@ -85,26 +89,26 @@ for video_file in "$videos_folder"/*; do
 
             # Generate thumbnails based on video duration
             if [ "$duration_ms" -lt 60000 ]; then
-              # Generate 4 thumbnails with timecode in the filename
-              for ((i = 0; i < 4; i++)); do
-                  segment_start=$((duration_in_seconds * i / 4))
-                  timecode=$(printf "%04d" $((segment_start)))
-                  if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/$timecode.jpg" &>/dev/null; then
-                      error_messages+=("Failed to generate thumbnail $i/4 for $video_name.")
-                      has_errors=true
-                  fi
-              done
+            # Generate 4 thumbnails with timecode in the filename
+            for ((i = 0; i < 4; i++)); do
+                segment_start=$((duration_in_seconds * i / 4))
+                timecode=$(printf "%02d:%02d:%02d" $((segment_start / 3600)) $(( (segment_start % 3600) / 60 )) $((segment_start % 60)))
+                if ! ffmpeg -ss "$timecode" -i "$video_file" -frames:v 1 "$output_folder/image-$i.jpg" &> /dev/null ; then
+                    error_messages+=("Failed to generate thumbnail $i/4 for $video_name.")
+                    has_errors=true
+                fi
+            done
             else
-              # Generate 16 thumbnails with timecode in the filename
-              for ((i = 0; i < 16; i++)); do
-                  segment_start=$((duration_in_seconds * i / 16))
-                  timecode=$(printf "%04d" $((segment_start)))
-                  if ! ffmpeg -ss "$segment_start" -i "$video_file" -hide_banner -loglevel error -nostats -vframes 1 "$output_folder/$timecode.jpg" &>/dev/null; then
-                      error_messages+=("Failed to generate thumbnail $i/16 for $video_name.")
-                      has_errors=true
-                  fi
-              done
-          fi
+            # Generate 16 thumbnails with timecode in the filename
+            for ((i = 0; i < 16; i++)); do
+                segment_start=$((duration_in_seconds * i / 16))
+                timecode=$(printf "%02d:%02d:%02d" $((segment_start / 3600)) $(( (segment_start % 3600) / 60 )) $((segment_start % 60)))
+                if ! ffmpeg -ss "$timecode" -i "$video_file" -frames:v 1 "$output_folder/image-$i.jpg" &> /dev/null; then
+                    error_messages+=("Failed to generate thumbnail $i/16 for $video_name.")
+                    has_errors=true
+                fi
+            done
+            fi
 
           wait # Wait for all background thumbnail generation processes to finish
 
@@ -158,8 +162,8 @@ for video_file in "$videos_folder"/*; do
               convert -size "${width}x${black_image_height}" xc:black -fill white -pointsize "$text_size" -gravity West -annotate +50+0 "$text" "$output_folder/image_noire.jpg"
           fi
           # Combine images vertically to create the final thumbnail image
-          convert "$output_folder/image_noire.jpg" "$output_folder/mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.jpg"
-          cp "$output_folder/${video_name}_thumbnails.jpg"  "$thumbnails_folder"
+          convert "$output_folder/image_noire.jpg" "$output_folder/mosaic.jpg" -background none -quality 80 -append "$output_folder/${video_name}_thumbnails.heic"
+          cp "$output_folder/${video_name}_thumbnails.heic"  "$thumbnails_folder"
           find "$output_folder" -maxdepth 1 -type f -name '*.jpg' ! -name "*thumbnails.jpg" -exec rm -v {} + &>/dev/null
           rm -r "$output_folder"
           ((video_count++))
